@@ -1,9 +1,5 @@
-"""Preprocessing utilities for the bank churn competition dataset."""
-
 from __future__ import annotations
-
 from typing import Optional
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -14,7 +10,17 @@ def select_input_columns(
     target_col: str = "Exited",
     drop_cols: Optional[list[str]] = None,
 ) -> list[str]:
-    """Return feature columns used for model training."""
+    """Return feature columns used for model training.
+
+    Args:
+        raw_df: Raw dataset containing features and (optionally) the target column.
+        target_col: Name of the target column to exclude from features.
+        drop_cols: Optional list of columns to drop from features (IDs, leakage columns, etc.).
+            If None, defaults to ["id", "CustomerId", "Surname"].
+
+    Returns:
+        A list of column names to be used as model features.
+    """
     if drop_cols is None:
         drop_cols = ["id", "CustomerId", "Surname"]
 
@@ -28,7 +34,18 @@ def split_train_val_data(
     random_state: int = 42,
     stratify: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split raw data into train and validation subsets."""
+    """Split raw data into train and validation subsets.
+
+    Args:
+        raw_df: Raw dataset that includes `target_col`.
+        target_col: Name of the target column used for stratification (if enabled).
+        test_size: Fraction of the dataset to allocate to validation.
+        random_state: Random seed for reproducibility.
+        stratify: If True, stratifies the split by `raw_df[target_col]`.
+
+    Returns:
+        A tuple of two DataFrames: (train_df, val_df).
+    """
     stratify_values = raw_df[target_col] if stratify else None
     train_df, val_df = train_test_split(
         raw_df,
@@ -40,7 +57,16 @@ def split_train_val_data(
 
 
 def get_feature_types(inputs_df: pd.DataFrame) -> tuple[list[str], list[str]]:
-    """Return numeric and categorical feature names."""
+    """Return numeric and categorical feature names.
+
+    Args:
+        inputs_df: DataFrame containing only feature columns.
+
+    Returns:
+        A tuple (numeric_cols, categorical_cols):
+            numeric_cols: List of numeric feature column names.
+            categorical_cols: List of categorical feature column names.
+    """
     numeric_cols = inputs_df.select_dtypes(include=["number"]).columns.tolist()
     categorical_cols = inputs_df.select_dtypes(exclude=["number"]).columns.tolist()
     return numeric_cols, categorical_cols
@@ -52,7 +78,20 @@ def scale_numeric_features(
     numeric_cols: list[str],
     scaler_numeric: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Optional[StandardScaler]]:
-    """Scale numeric columns with StandardScaler when scaler_numeric=True."""
+    """Scale numeric columns with StandardScaler when scaler_numeric=True.
+
+    Args:
+        train_inputs: Training features DataFrame.
+        val_inputs: Validation features DataFrame.
+        numeric_cols: List of numeric column names to scale.
+        scaler_numeric: If True, apply StandardScaler to `numeric_cols`.
+
+    Returns:
+        A tuple (train_processed, val_processed, scaler):
+            train_processed: Training DataFrame after scaling (or unchanged).
+            val_processed: Validation DataFrame after scaling (or unchanged).
+            scaler: Fitted StandardScaler if scaling was applied, otherwise None.
+    """
     train_processed = train_inputs.copy()
     val_processed = val_inputs.copy()
 
@@ -71,7 +110,19 @@ def encode_categorical_features(
     val_inputs: pd.DataFrame,
     categorical_cols: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame, OneHotEncoder]:
-    """One-hot encode categorical columns and append encoded features."""
+    """One-hot encode categorical columns and append encoded features.
+
+    Args:
+        train_inputs: Training features DataFrame.
+        val_inputs: Validation features DataFrame.
+        categorical_cols: List of categorical column names to one-hot encode.
+
+    Returns:
+        A tuple (train_processed, val_processed, encoder):
+            train_processed: Training DataFrame with categorical cols replaced by OHE columns.
+            val_processed: Validation DataFrame with categorical cols replaced by OHE columns.
+            encoder: Fitted OneHotEncoder instance.
+    """
     train_processed = train_inputs.copy()
     val_processed = val_inputs.copy()
 
@@ -114,7 +165,28 @@ def preprocess_data(
     Optional[StandardScaler],
     OneHotEncoder,
 ]:
-    """Preprocess raw train data and return artifacts for model training."""
+    """Preprocess raw train data and return artifacts for model training.
+
+    Args:
+        raw_df: Raw dataset containing features and target column.
+        target_col: Name of the target column.
+        drop_cols: Optional list of columns to exclude from features.
+            If None, defaults to ["id", "CustomerId", "Surname"].
+        test_size: Fraction of data reserved for validation.
+        random_state: Random seed for reproducibility.
+        stratify: If True, preserves class distribution during splitting.
+        scaler_numeric: If True, scales numeric features using StandardScaler.
+
+    Returns:
+        A tuple:
+            train_inputs: Preprocessed training features.
+            train_targets: Training target Series (int).
+            val_inputs: Preprocessed validation features.
+            val_targets: Validation target Series (int).
+            input_cols: List of original raw feature column names used from raw_df.
+            scaler: Fitted StandardScaler if enabled, else None.
+            encoder: Fitted OneHotEncoder used to encode categorical columns.
+    """
     input_cols = select_input_columns(raw_df, target_col=target_col, drop_cols=drop_cols)
     train_df, val_df = split_train_val_data(
         raw_df,
@@ -162,7 +234,20 @@ def preprocess_new_data(
     encoder: OneHotEncoder,
     model_features: Optional[list[str]] = None,
 ) -> pd.DataFrame:
-    """Preprocess new data (e.g., test.csv) with fitted scaler and encoder."""
+    """Preprocess new data with fitted scaler and encoder.
+
+    Args:
+        raw_df: New dataset (e.g., competition test.csv) containing at least `input_cols`.
+        input_cols: The raw feature columns used during training (output of select_input_columns()).
+        scaler: Fitted StandardScaler from training, or None if numeric scaling wasn't used.
+        encoder: Fitted OneHotEncoder from training.
+        model_features: Optional list of final model feature names (after encoding/scaling).
+            If provided, the output will be reindexed to this exact column order and
+            missing columns will be filled with 0.0.
+
+    Returns:
+        Preprocessed features DataFrame ready to be passed into a trained model.
+    """
     data = raw_df[input_cols].copy()
 
     categorical_cols = list(encoder.feature_names_in_)
